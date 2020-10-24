@@ -329,7 +329,7 @@ int fileProcessingMode()
 		delete generateSrcFileHashTask;
 	}
 
-	if (FileSystem::fileExists(file->getPath() + ".hash")) {
+	if (FileSystem::fileExists(file->getPath() + ".info")) {
 		printf("Already processed. Ignoring\n");
 		return 0;
 	}

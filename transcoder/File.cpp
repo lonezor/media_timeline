@@ -126,7 +126,7 @@ void File::determineFileType() {
 	else if (endsWith(s, ".sid")) {
 		type = FILE_TYPE_SID;
 	}
-	else if (endsWith(s, ".hash")) {
+	else if (endsWith(s, ".info")) {
 		type = FILE_TYPE_HASH;
 	}
 
@@ -488,10 +488,6 @@ void File::writeInfoFile_visual(string path) {
     	out +=  it->first + string(": ") + it->second + string("\n");
 	}
 
-	// Must be last (multi line output)
-	out += string("MediaDescription: ") + string("\n");
-	out += string("\n");
-
 	FILE* fileStream = fopen(path.c_str(), "w");
 	if (!fileStream) {
 		printf("error, could not open %s\n", path.c_str());
@@ -552,10 +548,6 @@ void File::writeInfoFile_audio(string path) {
 	{
     	out +=  it->first + string(": ") + it->second + string("\n");
 	}
-
-	// Must be last (multi line output)
-	out += string("MediaDescription: ") + string("\n");
-	out += string("\n");
 
 	FILE* fileStream = fopen(path.c_str(), "w");
 	if (!fileStream) {
@@ -618,7 +610,7 @@ string File::getHashString() {
 bool File::writeHashFile() {
 	FILE*     dstFile;
 	uint32_t  i;
-	string    dstPath = getPath() + ".hash";
+	string    dstPath = getPath() + ".info";
 
 	dstFile = fopen(dstPath.c_str(), "w");
 	if (dstFile == NULL) {

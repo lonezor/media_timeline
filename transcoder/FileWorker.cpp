@@ -536,7 +536,7 @@ string WorkerThread::getHashFilePath(context_t* ctx, File* file) {
 	//	targetDirName  = ctx->options->outputDir + "/videos/" + removedBaseDir;
 	//}
 
-	return targetDirName + "/" + file->getNameWithoutFileType() + ".hash";
+	return targetDirName + "/" + file->getNameWithoutFileType() + ".info";
 }
 
 bool WorkerThread::hashFileFoundInFs(context_t* ctx, File* file) {
@@ -843,8 +843,8 @@ void WorkerThread::relocateDstFiles(context_t* ctx, File* oldDstHashFile, File* 
 
 				//printf("file to be relocated: %s\n", file->getPath().c_str());
 
-				if (Common::subStringCount(file->getPath(), ".hash") != 0) {
-					newPath = ctx->options->outputDir + "/images" + srcRemovedBaseDir + "/" + srcFile->getNameWithoutFileType() + ".hash";
+				if (Common::subStringCount(file->getPath(), ".info") != 0) {
+					newPath = ctx->options->outputDir + "/images" + srcRemovedBaseDir + "/" + srcFile->getNameWithoutFileType() + ".info";
 				}
 
 				if (Common::subStringCount(file->getPath(), "0160_q1") != 0) {
@@ -895,7 +895,7 @@ void WorkerThread::relocateDstFiles(context_t* ctx, File* oldDstHashFile, File* 
 				pthread_mutex_lock(&sharedThreadData->taskQueueLock);
 				sharedThreadData->counters.nrOfRelocatedDstFiles_dstImagesMoved++;
 
-				if (Common::subStringCount(file->getPath(), ".hash") != 0) {
+				if (Common::subStringCount(file->getPath(), ".info") != 0) {
 					sharedThreadData->counters.nrOfRelocatedDstFiles_srcImagesMoved++;
 				}
 				pthread_mutex_unlock(&sharedThreadData->taskQueueLock);
@@ -923,7 +923,7 @@ void WorkerThread::relocateDstFiles(context_t* ctx, File* oldDstHashFile, File* 
 				pthread_mutex_lock(&sharedThreadData->taskQueueLock);
 				sharedThreadData->counters.nrOfRelocatedDstFiles_dstVideosMoved++;
 
-				if (Common::subStringCount(file->getPath(), ".hash") != 0) {
+				if (Common::subStringCount(file->getPath(), ".info") != 0) {
 					sharedThreadData->counters.nrOfRelocatedDstFiles_srcVideosMoved++;
 				}
 				pthread_mutex_unlock(&sharedThreadData->taskQueueLock);

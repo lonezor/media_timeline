@@ -15,11 +15,10 @@
 
 #include "image.hpp"
 #include "surface.hpp"
+#include "fs_scanner.hpp"
 
 #define TMP_OUTPUT_PATH "/tmp/cg_tmp.png"
 #define TMP_OUTPUT_PATH2 "/tmp/cg_tmp2.png"
-
-using dir_name_t = std::string;
 
 typedef enum {
   text_category_main_title, /**< Centered in the middle, large font */
@@ -28,59 +27,6 @@ typedef enum {
   text_category_location, /**< Right-aligned in the top, small font */
   text_category_description, /**< Centered in the button, small font (multi-line) */
 } text_category_t;
-
-class fs_scanner
-{
-    public:
-        void scan(std::string path, std::string filter_regex);
-
-        void clear() { path_map_.clear(); }
-
-        std::map<dir_name_t, std::vector<std::string>> path_map() { return path_map_; }
-
-    private:
-        std::map<dir_name_t, std::vector<std::string>> path_map_;
-};
-
-void fs_scanner::scan(std::string dir_path, std::string filter_regex)
-{
-    struct dirent **namelist;
-	int i,n;
-
-	n = scandir(dir_path.c_str(), &namelist, 0, alphasort);
-	if (n < 0)  {
-		perror("scandir");
-		return;
-	}
-
-	for (i = 0; i < n; i++) {
-		auto file_name = std::string(namelist[i]->d_name);
-		uint8_t type    = namelist[i]->d_type;
-		std::string path = dir_path + "/" + file_name;
-		size_t pos;
-
-		if (file_name == "." ||
-			file_name == "..") {
-			free(namelist[i]);
-			continue;
-		}
-
-		if (type == DT_REG) {
-            auto re = std::regex(filter_regex);
-            std::smatch match;
-            auto matched = std::regex_search(path, match, re);
-            if (!matched) {
-                continue;
-            }
-            path_map_[dir_path].emplace_back(path);
-		}
-		else if (type == DT_DIR) {
-			scan(path, filter_regex);
-		}
-		free(namelist[i]);
-	}
-	free(namelist);
-}
 
 bool file_exists(std::string path)
 {
@@ -94,13 +40,29 @@ bool file_exists(std::string path)
     return found;
 }
 
+enum class text_visibility
+{
+    black,
+    white,
+};
+
 struct file_description
 {
+    bool video;
     std::string main_title;
     std::string title;
     std::string timestamp;
     std::string location;
     std::string description;
+    text_visibility visibility_main_title;
+    text_visibility visibility_title;
+    text_visibility visibility_timestamp;
+    text_visibility visibility_location;
+    text_visibility visibility_description;
+    bool shadow_title;
+    bool shadow_timestamp;
+    bool shadow_location;
+    bool shadow_description;
 };
 
 std::string extract_value_from_attribute_pattern(const std::string& line, std::string pattern)
@@ -117,10 +79,8 @@ std::string extract_value_from_attribute_pattern(const std::string& line, std::s
     return value;
 }
 
-file_description parse_info_file(std::string path)
+file_description parse_info_file(file_description& desc, std::string path)
 {
-    file_description desc;
-
     printf("info file path '%s'\n", path.c_str());
 
     // Read file
@@ -138,37 +98,192 @@ file_description parse_info_file(std::string path)
     while (std::getline(input, line, '\n')) {
 
         // Main title
-        auto value = extract_value_from_attribute_pattern(line, "MainTitle: ");
+        auto value = extract_value_from_attribute_pattern(line, "W_MainTitle: ");
         if (!value.empty()) {
-            desc.main_title = value;
+            if (desc.main_title.empty()) {
+                desc.main_title = value;
+                desc.visibility_main_title = text_visibility::white;
+            }
             continue;
         }
 
         // Title
-        value = extract_value_from_attribute_pattern(line, "Title: ");
+        value = extract_value_from_attribute_pattern(line, "W_Title: ");
         if (!value.empty()) {
-            desc.title = value;
+            if (desc.title.empty()) {
+                desc.title = value;
+                desc.visibility_title = text_visibility::white;
+                desc.shadow_title = false;
+            }
             continue;
         }
 
-        // Title
+        value = extract_value_from_attribute_pattern(line, "B_Title: ");
+        if (!value.empty()) {
+            if (desc.title.empty()) {
+                desc.title = value;
+                desc.visibility_title = text_visibility::black;
+                desc.shadow_title = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "WS_Title: ");
+        if (!value.empty()) {
+            if (desc.title.empty()) {
+                desc.title = value;
+                desc.visibility_title = text_visibility::white;
+                desc.shadow_title = true;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "BS_Title: ");
+        if (!value.empty()) {
+            if (desc.title.empty()) {
+                desc.title = value;
+                desc.visibility_title = text_visibility::black;
+                desc.shadow_title = true;
+            }
+            continue;
+        }
+
+        // Timestamp
         value = extract_value_from_attribute_pattern(line, "Time.Date: ");
         if (!value.empty()) {
-            desc.timestamp = value;
+            if (desc.timestamp.empty()) {
+                desc.timestamp = value;
+                desc.visibility_timestamp = text_visibility::white;
+                desc.shadow_timestamp = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "W_Time.Date: ");
+        if (!value.empty()) {
+            if (desc.timestamp.empty()) {
+                desc.timestamp = value;
+                desc.visibility_timestamp = text_visibility::white;
+                desc.shadow_timestamp = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "B_Time.Date: ");
+        if (!value.empty()) {
+            if (desc.timestamp.empty()) {
+                desc.timestamp = value;
+                desc.visibility_timestamp = text_visibility::black;
+                desc.shadow_timestamp = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "WS_Time.Date: ");
+        if (!value.empty()) {
+            if (desc.timestamp.empty()) {
+                desc.timestamp = value;
+                desc.visibility_timestamp = text_visibility::white;
+                desc.shadow_timestamp = true;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "BS_Time.Date: ");
+        if (!value.empty()) {
+            if (desc.timestamp.empty()) {
+                desc.timestamp = value;
+                desc.visibility_timestamp = text_visibility::black;
+                desc.shadow_timestamp = true;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "Video: ");
+        if (!value.empty()) {
+            desc.video = true;
             continue;
         }
 
         // Location
-        value = extract_value_from_attribute_pattern(line, "Location: ");
+        value = extract_value_from_attribute_pattern(line, "W_Location: ");
         if (!value.empty()) {
-            desc.location = value;
+            if (desc.location.empty()) {
+                desc.location = value;
+                desc.visibility_location = text_visibility::white;
+                desc.shadow_location = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "B_Location: ");
+        if (!value.empty()) {
+            if (desc.location.empty()) {
+                desc.location = value;
+                desc.visibility_location = text_visibility::black;
+                desc.shadow_location = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "WS_Location: ");
+        if (!value.empty()) {
+            if (desc.location.empty()) {
+                desc.location = value;
+                desc.visibility_location = text_visibility::white;
+                desc.shadow_location = true;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "BS_Location: ");
+        if (!value.empty()) {
+            if (desc.location.empty()) {
+                desc.location = value;
+                desc.visibility_location = text_visibility::black;
+                desc.shadow_location = true;
+            }
             continue;
         }
 
         // Description
-        value = extract_value_from_attribute_pattern(line, "MediaDescription: ");
+        value = extract_value_from_attribute_pattern(line, "W_MediaDescription: ");
         if (!value.empty()) {
-            desc.description = value;
+            if (desc.description.empty()) {
+                desc.description = value;
+                desc.visibility_description = text_visibility::white;
+                desc.shadow_description = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "B_MediaDescription: ");
+        if (!value.empty()) {
+            if (desc.description.empty()) {
+                desc.description = value;
+                desc.visibility_description = text_visibility::black;
+                desc.shadow_description = false;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "WS_MediaDescription: ");
+        if (!value.empty()) {
+            if (desc.description.empty()) {
+                desc.description = value;
+                desc.visibility_description = text_visibility::white;
+                desc.shadow_description = true;
+            }
+            continue;
+        }
+
+        value = extract_value_from_attribute_pattern(line, "BS_MediaDescription: ");
+        if (!value.empty()) {
+            if (desc.description.empty()) {
+                desc.description = value;
+                desc.visibility_description = text_visibility::black;
+                desc.shadow_description = true;
+            }
             continue;
         }
 
@@ -178,12 +293,6 @@ file_description parse_info_file(std::string path)
          desc.description += line;
         }
     }
-
-   // printf("desc.main_title '%s'\n", desc.main_title.c_str());
-   // printf("desc.title '%s'\n", desc.title.c_str());
-   // printf("desc.timestamp '%s'\n", desc.timestamp.c_str());
-   // printf("desc.location '%s'\n", desc.location.c_str());
- //   printf("desc.description '%s'\n", desc.description.c_str());
 
     return desc;
 }
@@ -216,27 +325,35 @@ std::string determine_image_base_path_from_hash_file(std::string output_path, st
     return output_path + "/" + sha1;
 }
 
-void surface_draw_text(surface_t* surface, double font_size, double txt_x, double txt_y, std::string text)
+void surface_draw_text(surface_t* surface, double font_size, double txt_x, double txt_y, std::string text, text_visibility visibility, bool shadow)
 {
-#if 1
+    // Background
+    if (shadow) {
+        if (visibility == text_visibility::black) {
+            surface_op_sourceRgb(surface, 1, 1, 1);
+        } else {
+            surface_op_sourceRgb(surface, 0, 0, 0);
+        }
+        surface_op_fontSize(surface, font_size * 1.010);
+        surface_op_moveTo(surface, txt_x - (txt_x * 0.002), txt_y + (txt_y * 0.05));
+        surface_op_showText(surface, text.c_str());
+        surface_op_stroke(surface);
+    }
+
+    // Foreground
+    if (visibility == text_visibility::black) {
+        surface_op_sourceRgb(surface, 0, 0, 0);
+    } else {
+        surface_op_sourceRgb(surface, 1, 1, 1);
+    }
+
     surface_op_fontSize(surface, font_size);
-    surface_op_sourceRgb(surface, 1, 1, 1);
     surface_op_moveTo(surface, txt_x, txt_y);
     surface_op_showText(surface, text.c_str());
     surface_op_stroke(surface);
-#else
-    surface_op_fontSize(surface, font_size);
-    surface_op_moveTo (surface, txt_x, txt_y);
-    surface_op_textPath (surface, text.c_str());
-    surface_op_sourceRgb(surface, 1, 1, 1);
-    surface_op_fillPreserve (surface);
-    surface_op_sourceRgb (surface, 0.15, 0.15, 0.15);
-    surface_op_setLineWidth(surface, 0.5);
-    surface_op_stroke (surface);
-#endif
 }
 
-void draw_text(surface_t* surface, double screen_width, double screen_height, text_category_t txt_category, std::string text)
+void draw_text(surface_t* surface, double screen_width, double screen_height, text_category_t txt_category, std::string text, text_visibility visibility, bool shadow)
 {
     double font_size = 1;
     double txt_x = 0;
@@ -246,16 +363,16 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
         case text_category_title: {
             font_size = 20;
             txt_y = font_size;
-            double txt_offset = (text.size() / 2) * (font_size * 1.16);
+            double txt_offset = (text.size() * font_size * 0.65) / 2;
             txt_x = (screen_width / 2) - txt_offset;
             if (txt_x < 0) {
                 txt_x = 0;
             }
-            surface_draw_text(surface, font_size, txt_x, txt_y, text);
+            surface_draw_text(surface, font_size, txt_x, txt_y, text, visibility, shadow);
             break;
         }
         case text_category_main_title: {
-            font_size = 100;
+            font_size = 80;
             double txt_offset = (text.size() / 2) * (font_size * 0.61);
             txt_x = (screen_width / 2) - txt_offset;
             if (txt_x < 0) {
@@ -263,25 +380,25 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
             }
 
             txt_y = (screen_height / 2) + (font_size * 0.30);
-            surface_draw_text(surface, font_size, txt_x, txt_y, text);
+            surface_draw_text(surface, font_size, txt_x, txt_y, text, visibility, shadow);
             break;
         }
         case text_category_timestamp: {
             font_size = 20;
             txt_x = 5;
             txt_y = font_size;
-            surface_draw_text(surface, font_size, txt_x, txt_y, text);
+            surface_draw_text(surface, font_size, txt_x, txt_y, text, visibility, shadow);
             break;
         }
         case text_category_location: {
             font_size = 20;
-            double txt_offset = (text.size() / 2) * (font_size * 1.25);
+            double txt_offset = (text.size() / 2) * (font_size * 1.16);
             txt_x = screen_width - txt_offset;
             if (txt_x < 0) {
                 txt_x = 0;
             }
             txt_y = font_size;
-            surface_draw_text(surface, font_size, txt_x, txt_y, text);
+            surface_draw_text(surface, font_size, txt_x, txt_y, text, visibility, shadow);
             break;
         }
         case text_category_description: {
@@ -305,7 +422,7 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
                 if (txt_y < 0) {
                     txt_y = 0;
                 }
-                surface_draw_text(surface, font_size, txt_x, txt_y, line);
+                surface_draw_text(surface, font_size, txt_x, txt_y, line, visibility, shadow);
             }
             break;
         }
@@ -327,27 +444,27 @@ void generate_tagged_image(std::string img_path, file_description file_desc, dou
 
     // Main title
     if (!file_desc.main_title.empty()) {
-        draw_text(surface, screen_width, screen_height, text_category_main_title, file_desc.main_title);
+        draw_text(surface, screen_width, screen_height, text_category_main_title, file_desc.main_title, file_desc.visibility_main_title, false);
     }
 
     // Title
     if (!file_desc.title.empty()) {
-        draw_text(surface, screen_width, screen_height, text_category_title, file_desc.title);
+        draw_text(surface, screen_width, screen_height, text_category_title, file_desc.title, file_desc.visibility_title, file_desc.shadow_title);
     }
 
     // Timestamp
     if (!file_desc.timestamp.empty()) {
-        draw_text(surface, screen_width, screen_height, text_category_timestamp, file_desc.timestamp);
+        draw_text(surface, screen_width, screen_height, text_category_timestamp, file_desc.timestamp, file_desc.visibility_timestamp, file_desc.shadow_timestamp);
     }
 
     // Location
     if (!file_desc.location.empty()) {
-        draw_text(surface, screen_width, screen_height, text_category_location, file_desc.location);
+        draw_text(surface, screen_width, screen_height, text_category_location, file_desc.location, file_desc.visibility_location, file_desc.shadow_location);
     }
 
     // Description
     if (!file_desc.description.empty()) {
-        draw_text(surface, screen_width, screen_height, text_category_description, file_desc.description);
+        draw_text(surface, screen_width, screen_height, text_category_description, file_desc.description, file_desc.visibility_description, file_desc.shadow_description);
     }
  
     surface_saveAsJpg(surface, tagged_img_path.c_str());
@@ -399,6 +516,8 @@ void generate_collage(double screen_width,
                       std::string main_title)
 {
     int nr_images = paths.size();
+
+    printf("generating %s from %d images\n", out_path2.c_str(), nr_images);
 
     if (nr_images == 0) {
         return;
@@ -460,7 +579,7 @@ void generate_collage(double screen_width,
     surface_op_rectangle(surface, 0, 0, screen_width, screen_height);
     surface_op_fill(surface);
 
-    draw_text(surface, screen_width, screen_height, text_category_main_title, main_title);
+    draw_text(surface, screen_width, screen_height, text_category_main_title, main_title, text_visibility::white, false);
 
     surface_saveAsJpg(surface, out_path2.c_str());
 
@@ -478,7 +597,12 @@ void process_individual_files(std::map<dir_name_t, std::vector<std::string>>& pa
             auto img_base_path = determine_image_base_path_from_hash_file("/home/output", hash_path);
             auto info_file_path = img_base_path + ".info";
 
-            auto file_desc = parse_info_file(info_file_path);
+            // Overriding top level info file
+            file_description file_desc;
+            file_desc = parse_info_file(file_desc, hash_path);
+
+            // Extend with detailed info file
+            file_desc = parse_info_file(file_desc, info_file_path);
             
             auto quality_suffix = "1080";
             auto img_path = img_base_path + "_" + quality_suffix  +  ".jpg";
@@ -579,10 +703,11 @@ void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_ma
             }
 
             fs_scanner scanner;
-            scanner.scan(level, ".*hash");
+            scanner.scan(level, ".*info");
             auto path_map = scanner.path_map();
             for(auto&& it : path_map) {
                 auto d = it.first;
+                printf("Analysing %s\n", dir.c_str());
                 auto p_map = path_map[d];
                 for(auto hash_path : p_map) {
                     auto img_base_path = determine_image_base_path_from_hash_file("/home/output", hash_path);
@@ -614,8 +739,7 @@ void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_ma
         auto dir_out_path1 = level_sha1_base + "_1080.jpg";
         auto dir_out_path2 = level_sha1_base + "_1080_tagged.jpg";
 
-        if (!file_exists(dir_out_path1) && 
-            !file_exists(dir_out_path2)) {
+        if (!file_exists(dir_out_path2)) { 
             generate_collage(1920,
                                1080,
                               collage_map[level],
@@ -631,7 +755,7 @@ int main()
     system("/usr/bin/mtransc");
 
     fs_scanner scanner;
-    scanner.scan("/home/lonezor/Media/media_timeline", ".*hash");
+    scanner.scan("/home/lonezor/Media/media_timeline", ".*info");
     auto path_map = scanner.path_map();
 
     process_individual_files(path_map);
@@ -642,8 +766,7 @@ int main()
 
     process_directories(path_map, "/home/lonezor/Media/media_timeline");
 
-
-//generate_tagged_video();
+    //generate_tagged_video();
 
 
 
