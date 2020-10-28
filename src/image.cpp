@@ -59,7 +59,7 @@ image_loadFromFile(image_t* img, const char* path, int width, int height)
                                    TRUE,
                                    &err);
     if (!img->pixbuf) {
-        printf("gdk_pixbuf_new_from_file fail\n");
+        printf("gdk_pixbuf_new_from_file fail: %s\n", path);
         return FALSE;
     }
 

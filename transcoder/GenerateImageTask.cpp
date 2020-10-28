@@ -448,6 +448,9 @@ FIBITMAP* GenerateImageTask::generateImageFiles_imageSrc_createLetterBoxedThumbN
 		float letterBoxHeight;
 
 		letterBoxHeight = ceil((float)thumbNailWidth / aspectRatio);
+		if (letterBoxHeight > thumbNailHeight) {
+			letterBoxHeight = thumbNailHeight;
+		}
 
 		printf("Landscape orientation, aspect ratio %f %dx%d letterbox height %d --> %d x %d\n",
                aspectRatio, width, height, (int)letterBoxHeight, thumbNailWidth, thumbNailHeight);

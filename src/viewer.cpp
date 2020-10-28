@@ -112,15 +112,17 @@ struct timeline_entry
     bool video;
     std::string raw_path;
     std::string tagged_path;
+    std::string dir_path;
     int level;
 };
 
-timeline_entry create_timeline_entry(bool directory, bool video, int level, std::string raw_path, std::string tagged_path)
+timeline_entry create_timeline_entry(bool directory, bool video, std::string dir_path, int level, std::string raw_path, std::string tagged_path)
 {
     timeline_entry entry;
 
     entry.directory = directory;
     entry.video = video;
+    entry.dir_path = dir_path;
     entry.level = level;
     entry.raw_path = raw_path;
     entry.tagged_path = tagged_path;
@@ -158,11 +160,13 @@ std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
         std::stringstream input(dir);
         std::string e;
         std::string level = root_path;
+        std::string dir_name;
         
         while (std::getline(input, e, '/')) {
             if (e.empty()) {
                 continue;
             }
+            dir_name = level;
             level += "/" + e;
 
             if (found_dirs.find(level) == found_dirs.end()) {
@@ -174,7 +178,7 @@ std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
 
                 auto lvl = get_level_integer(level);
 
-                timeline_entries.emplace_back(create_timeline_entry(true, false, lvl, dir_raw_path, dir_tagged_path));
+                timeline_entries.emplace_back(create_timeline_entry(true, false, dir_name, lvl, dir_raw_path, dir_tagged_path));
 
                 scanner.clear();
                 scanner.set_recursive(false);
@@ -194,7 +198,7 @@ std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
                         auto img_raw_path = img_base_path + "_1080.jpg";
                         auto img_tagged_path = img_base_path + "_1080_tagged.jpg";
 
-                        timeline_entries.emplace_back(create_timeline_entry(false, false, lvl, img_raw_path, img_tagged_path));
+                        timeline_entries.emplace_back(create_timeline_entry(false, false, dir_name, lvl, img_raw_path, img_tagged_path));
                     }
                 }
             }
@@ -238,7 +242,8 @@ int find_prev_dir_idx(std::vector<timeline_entry>& timeline_entries, int curr_id
         idx--;
 
         if (timeline_entries[idx].directory &&
-            timeline_entries[idx].level == curr_lvl) {
+            timeline_entries[idx].level == curr_lvl &&
+            timeline_entries[idx].dir_path.find(timeline_entries[curr_idx].dir_path) != std::string::npos) {
             return idx;
         }
     }
@@ -255,7 +260,8 @@ int find_next_dir_idx(std::vector<timeline_entry>& timeline_entries, int curr_id
         idx++;
 
         if (timeline_entries[idx].directory && 
-            timeline_entries[idx].level == curr_lvl) {
+            timeline_entries[idx].level == curr_lvl &&
+            timeline_entries[idx].dir_path.find(timeline_entries[curr_idx].dir_path) != std::string::npos) {
             return idx;
         }
     }
@@ -271,7 +277,8 @@ int find_prev_level_idx(std::vector<timeline_entry>& timeline_entries, int curr_
     while(idx - 1 >= 0) {
         idx--;
 
-        if (timeline_entries[idx].level < curr_lvl && timeline_entries[idx].directory) {
+        if (timeline_entries[idx].level < curr_lvl &&
+            timeline_entries[idx].directory) {
             return idx;
         }
     }
@@ -287,7 +294,8 @@ int find_next_level_idx(std::vector<timeline_entry>& timeline_entries, int curr_
     while(idx + 1 < timeline_entries.size()) {
         idx++;
 
-        if (timeline_entries[idx].level > curr_lvl && timeline_entries[idx].directory) {
+        if (timeline_entries[idx].level > curr_lvl &&
+            timeline_entries[idx].directory) {
             return idx;
         }
     }
@@ -317,10 +325,9 @@ int main(int argc, char* argv[])
 
     SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO);
     SDL_CreateWindowAndRenderer(
-        1280, 720,
+        1920, 1080,
         0, &window, &renderer
     );
-    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 
     IMG_Init(IMG_INIT_JPG);
 
@@ -340,27 +347,62 @@ int main(int argc, char* argv[])
                         toggle_flag = false;
                     }
 
+                    int shift_state = KMOD_SHIFT;
+                    bool shift = false;
+                    if (SDL_GetModState() & shift_state != 0) {
+                        shift = true;
+                    }
+
                     switch (key_code) {
                         case SDLK_q:
                             exit_signal = true;
                             break;
+                        case SDLK_f: {
+                            static int mode = 0;
+                            if (mode == 0) {
+                                mode = SDL_WINDOW_FULLSCREEN_DESKTOP;
+                            } else {
+                                mode = 0;
+                            }
+                            SDL_SetWindowFullscreen(window, mode);
+                            display_image(te, renderer, &texture, toggle_flag);
+                            break;
+                        }
                         case SDLK_SPACE:
                             toggle_flag = !toggle_flag;
                             display_image(te, renderer, &texture, toggle_flag);
                             break;
                         case SDLK_LEFT:
-                            if (te_idx - 1 >= 0)  {
-                                te_idx--;
+                            if (shift) {
+                                auto idx = find_prev_dir_idx(timeline_entries, te_idx);
+                                if (idx != te_idx) {
+                                    te_idx = idx;
+                                    te = timeline_entries[te_idx];
+                                    display_image(te, renderer, &texture, toggle_flag);
+                                }
+                            } else {
+                                if (te_idx - 1 >= 0)  {
+                                    te_idx--;
+                                }
+                                te = timeline_entries[te_idx];
+                                display_image(te, renderer, &texture, toggle_flag);
                             }
-                            te = timeline_entries[te_idx];
-                            display_image(te, renderer, &texture, toggle_flag);
                             break;
                         case SDLK_RIGHT:
-                            if (te_idx + 1 < nr_te_entries)  {
-                                te_idx++;
+                            if (shift) {
+                                auto idx = find_next_dir_idx(timeline_entries, te_idx);
+                                if (idx != te_idx) {
+                                    te_idx = idx;
+                                    te = timeline_entries[te_idx];
+                                    display_image(te, renderer, &texture, toggle_flag);
+                                }
+                            } else {
+                                if (te_idx + 1 < nr_te_entries)  {
+                                    te_idx++;
+                                }
+                                te = timeline_entries[te_idx];
+                                display_image(te, renderer, &texture, toggle_flag);
                             }
-                            te = timeline_entries[te_idx];
-                            display_image(te, renderer, &texture, toggle_flag);
                             break;
                         case SDLK_UP: {
                             auto idx = find_prev_level_idx(timeline_entries, te_idx);

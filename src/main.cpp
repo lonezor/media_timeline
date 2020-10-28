@@ -392,7 +392,7 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
         }
         case text_category_location: {
             font_size = 20;
-            double txt_offset = (text.size() / 2) * (font_size * 1.16);
+            double txt_offset = text.size() * (font_size * 0.65);
             txt_x = screen_width - txt_offset;
             if (txt_x < 0) {
                 txt_x = 0;
@@ -707,7 +707,7 @@ void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_ma
             auto path_map = scanner.path_map();
             for(auto&& it : path_map) {
                 auto d = it.first;
-                printf("Analysing %s\n", dir.c_str());
+                //printf("Analysing %s\n", dir.c_str());
                 auto p_map = path_map[d];
                 for(auto hash_path : p_map) {
                     auto img_base_path = determine_image_base_path_from_hash_file("/home/output", hash_path);
@@ -752,8 +752,6 @@ void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_ma
 
 int main()
 {
-    system("/usr/bin/mtransc");
-
     fs_scanner scanner;
     scanner.scan("/home/lonezor/Media/media_timeline", ".*info");
     auto path_map = scanner.path_map();
