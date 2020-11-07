@@ -22,7 +22,7 @@ void fs_scanner::set_recursive(bool recursive)
 
 void fs_scanner::scan(std::string dir_path, std::string filter_regex)
 {
-    struct dirent **namelist;
+    struct dirent **namelist = nullptr;
 	int i,n;
 
 	n = scandir(dir_path.c_str(), &namelist, 0, alphasort);
@@ -48,6 +48,7 @@ void fs_scanner::scan(std::string dir_path, std::string filter_regex)
             std::smatch match;
             auto matched = std::regex_search(path, match, re);
             if (!matched) {
+				free(namelist[i]);
                 continue;
             }
             path_map_[dir_path].emplace_back(path);

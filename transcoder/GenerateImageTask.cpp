@@ -718,9 +718,9 @@ bool GenerateImageTask::generateImageFiles_imageSrc(imageBf_t images) {
 			}
 
 			/* don't generate upscaled thumbnails. Allow minor difference */
-			if (thumbNailWidth > 1024 && thumbNailWidth - 256  > width) {
-				continue;
-			}
+			//if (thumbNailWidth > 1024 && thumbNailWidth - 256  > width) {
+			//	continue;
+			//}
 
 			/* image source too small for current size */
 

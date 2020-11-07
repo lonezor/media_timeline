@@ -437,6 +437,7 @@ void generate_tagged_image(std::string img_path, file_description file_desc, dou
     image_t* img = image_create();
     image_loadFromFile(img, img_path.c_str(), screen_width, screen_height);
     image_saveAsPng(img, TMP_OUTPUT_PATH);
+    image_destroy(img);
 
     surface_t* surface = surface_create(TMP_OUTPUT_PATH, ANTI_ALIAS_MODE_BEST);
     surface_set_referenceResolution(surface, screen_width, screen_height);
@@ -752,10 +753,10 @@ void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_ma
 
 int main()
 {
+    
     fs_scanner scanner;
     scanner.scan("/home/lonezor/Media/media_timeline", ".*info");
     auto path_map = scanner.path_map();
-
     process_individual_files(path_map);
 
     scanner.clear();
@@ -765,8 +766,6 @@ int main()
     process_directories(path_map, "/home/lonezor/Media/media_timeline");
 
     //generate_tagged_video();
-
-
 
 
     return 0;
