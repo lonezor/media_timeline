@@ -7,6 +7,7 @@
 #include <regex>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <mhash.h>
 #include <sstream>
 #include <sys/types.h>
@@ -361,7 +362,7 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
 
     switch(txt_category) {
         case text_category_title: {
-            font_size = 20;
+            font_size = 200;
             txt_y = font_size;
             double txt_offset = (text.size() * font_size * 0.65) / 2;
             txt_x = (screen_width / 2) - txt_offset;
@@ -372,7 +373,7 @@ void draw_text(surface_t* surface, double screen_width, double screen_height, te
             break;
         }
         case text_category_main_title: {
-            font_size = 80;
+            font_size = 500;
             double txt_offset = (text.size() / 2) * (font_size * 0.61);
             txt_x = (screen_width / 2) - txt_offset;
             if (txt_x < 0) {
@@ -536,12 +537,11 @@ void generate_collage(double screen_width,
 
     int nr_rows = ceil(static_cast<double>(nr_images) / static_cast<double>(nr_cols));
 
-
     double thumbnail_width  = floor(screen_width / static_cast<double>(nr_cols));
     double thumbnail_height = floor(thumbnail_width / aspect_ratio);
 
-    //printf("nr_images %d nr_cols %d nr_rows %d thumbnail_width %lf thumbnail_height %lf\n",
-      //  nr_images, nr_cols, nr_rows, thumbnail_width, thumbnail_height);
+    printf("nr_images %d nr_cols %d nr_rows %d thumbnail_width %lf thumbnail_height %lf\n",
+        nr_images, nr_cols, nr_rows, thumbnail_width, thumbnail_height);
 
     // Create surface
     image_t* img = image_create();
@@ -549,7 +549,7 @@ void generate_collage(double screen_width,
     image_saveAsPng(img, TMP_OUTPUT_PATH);
 
     surface_t* surface = surface_create(TMP_OUTPUT_PATH, ANTI_ALIAS_MODE_BEST);
-    surface_set_scalingMode(surface, SCALING_MODE_REFERENCE);
+    surface_set_scalingMode(surface, SCALING_MODE_NONE);
 
     surface_op_sourceRgb(surface, 0, 0, 0);
     surface_op_rectangle(surface, 0, 0, screen_width, screen_height);
@@ -563,7 +563,7 @@ void generate_collage(double screen_width,
         for(int x=0; x < nr_cols; x++, path_idx) {
 
             if (path_idx < nr_images) {
-                //printf("y_offset %lf x_offset %lf w %lf h %lf\n", y_offset, x_offset, thumbnail_width, thumbnail_height);
+               // printf("y_offset %lf x_offset %lf w %lf h %lf\n", y_offset, x_offset, thumbnail_width, thumbnail_height);
                 draw_thumbnail(paths[path_idx],  y_offset, x_offset, thumbnail_width, thumbnail_height, surface);
             }
 
@@ -574,13 +574,13 @@ void generate_collage(double screen_width,
         y_offset += thumbnail_height;
     }
 
-    surface_saveAsJpg(surface, out_path1.c_str());
+    //surface_saveAsJpg(surface, out_path1.c_str());
 
-    surface_op_sourceRgba(surface, 0, 0, 0, 0.60);
-    surface_op_rectangle(surface, 0, 0, screen_width, screen_height);
-    surface_op_fill(surface);
+  //  surface_op_sourceRgba(surface, 0, 0, 0, 0.60);
+  //  surface_op_rectangle(surface, 0, 0, screen_width, screen_height);
+  //  surface_op_fill(surface);
 
-    draw_text(surface, screen_width, screen_height, text_category_main_title, main_title, text_visibility::white, false);
+    draw_text(surface, screen_width, screen_height, text_category_title, main_title, text_visibility::white, true);
 
     surface_saveAsJpg(surface, out_path2.c_str());
 
@@ -680,97 +680,67 @@ std::string string_to_sha1(std::string input)
 }
 
 
-void process_directories(std::map<dir_name_t, std::vector<std::string>>& path_map, std::string root_path)
+
+int main(int argc, const char* argv[])
 {
+    if (argc < 3) {
+        return 0;
+    }
 
-    std::map<std::string,std::vector<std::string>> collage_map;
+    std::string title = std::string(argv[1]);
 
-    // Populate collage map
-    for(auto&& it : path_map) {
-        auto dir = it.first;
+    std::vector<std::string> search_paths;
+    for(int i=2; i < argc; i++) {
+        auto search_path = std::string(argv[i]);
+        printf("search_path %s\n", search_path.c_str());
+        search_paths.emplace_back(search_path);
+    }
 
-        auto root_path_size = root_path.size();
-        dir = dir.substr(root_path_size,dir.size() - root_path_size);
+    fs_scanner scanner;
+    printf("Scanning file system...\n");
+    scanner.scan("/home/lonezor/Media/media_timeline", ".*highlighted$");
+    auto path_map = scanner.path_map();
 
-        std::stringstream input(dir);
-        std::string e;
-        std::string level = root_path;
-        
-        while (std::getline(input, e, '/')) {
-            if (e.empty()) {
-                continue;
+    std::vector<std::string> img_paths;
+
+    for(auto e : path_map) {
+        auto paths = e.second;
+        for(auto&& path : paths) {
+            // Convert to info path
+            std::string pattern = ".highlighted";
+            auto pos = path.rfind(pattern);
+            if (pos != std::string::npos) {
+                path.erase(pos, pattern.size());
             }
-            level += "/" + e;
 
-            bool first_round = false;
-            if (collage_map.find(level) == collage_map.end()) {
-                first_round = true;
-            }
-
-            fs_scanner scanner;
-            scanner.scan(level, ".*info$");
-            auto path_map = scanner.path_map();
-            for(auto&& it : path_map) {
-                auto d = it.first;
-                //printf("Analysing %s\n", dir.c_str());
-                auto p_map = path_map[d];
-                for(auto hash_path : p_map) {
-                    auto img_base_path = determine_image_base_path_from_hash_file("/home/output", hash_path);
-                    auto img_path = img_base_path + "_1080" + ".jpg";
-                    if (first_round) {
-                        collage_map[level].emplace_back(img_path);
-                    } else {
-                    }
+            // Ignore paths outside of search scope
+            bool match = false;
+            for(auto&& search_path : search_paths) {
+                if (path.find(search_path) != std::string::npos) {
+                    match = true;
+                    break;
                 }
             }
 
-        }
-    }
-
-    // Process collage map
-    for(auto&& it : collage_map) {
-        auto level = it.first;
-
-        auto pos = level.rfind("/");
-        auto main_title = level.substr(pos+1, level.size() - pos);
-        pos = main_title.find("_");
-
-        // Remove sorting prefix if used (fixed length format 'xy_')
-        if (pos == 2) {
-            main_title = main_title.substr(pos+1, main_title.size() - pos);
-        }
-
-        auto level_sha1_base = "/home/output/" + string_to_sha1(level);
-        auto dir_out_path1 = level_sha1_base + "_1080.jpg";
-        auto dir_out_path2 = level_sha1_base + "_1080_tagged.jpg";
-
-        if (!file_exists(dir_out_path2)) { 
-            generate_collage(1920,
-                               1080,
-                              collage_map[level],
-                              dir_out_path1,
-                             dir_out_path2,
-                             main_title);
+            if (match) {
+                auto img_base_path = determine_image_base_path_from_hash_file("/home/output", path);
+                auto img_path = img_base_path + "_1080" + ".jpg";
+                printf("%s\n", img_path.c_str());
+                img_paths.emplace_back(img_path);
             }
+        }
     }
-}
 
-int main()
-{
-    
-    fs_scanner scanner;
-    scanner.scan("/home/lonezor/Media/media_timeline", ".*info$");
-    auto path_map = scanner.path_map();
-    process_individual_files(path_map);
+    // Generate
+    std::string dir_out_path1 = "/tmp/collage_4320.jpg";
+    std::string dir_out_path2 = "/tmp/collage_4320_tagged.jpg";
 
-    scanner.clear();
-    scanner.scan("/home/lonezor/Media/media_timeline", "");
-    path_map = scanner.path_map();
-
-    process_directories(path_map, "/home/lonezor/Media/media_timeline");
-
-    //generate_tagged_video();
-
+    generate_collage(7680,
+                     4320,
+                     img_paths,
+                     dir_out_path1,
+                     dir_out_path2,
+                     title);
 
     return 0;
 }

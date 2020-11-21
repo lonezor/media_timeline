@@ -163,13 +163,13 @@ void update_info_file(std::string info_path)
 
     std::string prefix;
     if (g_black) {
-        prefix = "B_";
+        prefix = "BS_";
     } else {
-        prefix = "W_";
+        prefix = "WS_";
     }
 
     if (g_timestamp != nullptr) {
-        info += prefix + "Time: " + std::string(g_timestamp) + "\n";
+        info += prefix + "Time.Date: " + std::string(g_timestamp) + "\n";
     }
 
     if (g_title != nullptr) {
@@ -213,7 +213,7 @@ int main(int argc, char* argv[])
 
     auto scanner = fs_scanner();
     scanner.set_recursive(false);
-    scanner.scan(std::string(cwd), ".*info");
+    scanner.scan(std::string(cwd), ".*info$");
     auto path_map = scanner.path_map();
 
     if (path_map.size() == 0) {

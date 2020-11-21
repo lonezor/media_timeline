@@ -130,7 +130,7 @@ void print_missing_output_files(std::string root_path) {
     printf("Expected files that are missing:\n");
 
     fs_scanner scanner;
-    scanner.scan(root_path, ".*info");
+    scanner.scan(root_path, ".*info$");
 
     auto path_map = scanner.path_map();
 

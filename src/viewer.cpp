@@ -1,8 +1,11 @@
 #include "fs_scanner.hpp"
+#include <unistd.h>
+
 
 #include <sstream>
 #include <string>
 #include <fstream>
+#include <sys/stat.h>
 #include <map>
 #include <mhash.h>
 
@@ -110,22 +113,89 @@ struct timeline_entry
 {
     bool directory;
     bool video;
+    std::string info_path;
     std::string raw_path;
     std::string tagged_path;
     std::string dir_path;
     int level;
+    bool highlighted;
 };
 
-timeline_entry create_timeline_entry(bool directory, bool video, std::string dir_path, int level, std::string raw_path, std::string tagged_path)
+bool file_exists(std::string path) {
+    struct stat sb;
+	bool found;
+	int result;
+
+    result = stat(path.c_str(), &sb);
+    found = (result == 0);
+
+    return found;
+}
+
+void highlight_entry(timeline_entry& entry)
+{
+    auto info_path = entry.info_path;
+
+    if (info_path.empty()) {
+        printf("[highlight_entry] Ignoring path (%s)\n", info_path.c_str());
+        return;
+    }
+
+    auto highlight_path = info_path + ".highlighted";
+
+    if (!file_exists(highlight_path)) {
+        printf("Creating %s\n", highlight_path.c_str());
+        std::string str = "highlighted";
+        std::ofstream f;
+        f.open(highlight_path, std::ofstream::out);
+        f << str;
+        f.close();
+    }
+
+    entry.highlighted = true;
+}
+
+void unhighlight_entry(timeline_entry& entry)
+{
+    auto info_path = entry.info_path;
+
+    if (info_path.empty()) {
+        printf("[unhighlight_entry] Ignoring path (%s)\n", info_path.c_str());
+        return;
+    }
+
+    auto highlight_path = info_path + ".highlighted";
+
+    if (file_exists(highlight_path)) {
+        printf("Deleting %s\n", highlight_path.c_str());
+        unlink(highlight_path.c_str());
+    }
+
+    entry.highlighted = false;
+}
+
+void delete_tagged_img(timeline_entry& entry)
+{
+    auto info_path = entry.info_path;
+
+    if (!entry.tagged_path.empty() && file_exists(entry.tagged_path)) {
+        printf("Deleting %s\n", entry.tagged_path.c_str());
+        unlink(entry.tagged_path.c_str());
+    }
+}
+
+timeline_entry create_timeline_entry(std::string info_path, bool directory, bool video, std::string dir_path, int level, std::string raw_path, std::string tagged_path, bool highlighted)
 {
     timeline_entry entry;
 
+    entry.info_path = info_path;
     entry.directory = directory;
     entry.video = video;
     entry.dir_path = dir_path;
     entry.level = level;
     entry.raw_path = raw_path;
     entry.tagged_path = tagged_path;
+    entry.highlighted = highlighted;
 
     return entry;
 }
@@ -145,7 +215,7 @@ int get_level_integer(std::string level)
 std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
     std::vector<timeline_entry> timeline_entries;
     fs_scanner scanner;
-    scanner.scan(root_path, ".*info");
+    scanner.scan(root_path, ".*info$");
 
     auto path_map = scanner.path_map();
 
@@ -178,7 +248,7 @@ std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
 
                 auto lvl = get_level_integer(level);
 
-                timeline_entries.emplace_back(create_timeline_entry(true, false, dir_name, lvl, dir_raw_path, dir_tagged_path));
+                timeline_entries.emplace_back(create_timeline_entry("", true, false, dir_name, lvl, dir_raw_path, dir_tagged_path, false));
 
                 scanner.clear();
                 scanner.set_recursive(false);
@@ -193,12 +263,16 @@ std::vector<timeline_entry> discover_timeline_entries(std::string root_path) {
                 for(auto&& level_it : files) {
                      auto level_dir = level_it.first;
                      auto p_map = path_map[level_dir];
-                    for(auto hash_path : p_map) {
-                        auto img_base_path = determine_image_base_path_from_hash_file("/home/output", hash_path);
+                    for(auto info_path : p_map) {
+                        auto img_base_path = determine_image_base_path_from_hash_file("/home/output", info_path);
                         auto img_raw_path = img_base_path + "_1080.jpg";
                         auto img_tagged_path = img_base_path + "_1080_tagged.jpg";
 
-                        timeline_entries.emplace_back(create_timeline_entry(false, false, dir_name, lvl, img_raw_path, img_tagged_path));
+                        bool highlighted = file_exists(info_path + ".highlighted");
+
+                        printf("%s: highlighted=%d\n", info_path.c_str(), highlighted);
+
+                        timeline_entries.emplace_back(create_timeline_entry(info_path, false, false, dir_name, lvl, img_raw_path, img_tagged_path, highlighted));
                     }
                 }
             }
@@ -223,6 +297,11 @@ void display_image(timeline_entry& te, SDL_Renderer *renderer, SDL_Texture** tex
         path = te.tagged_path.c_str();
     } else {
         path = te.raw_path.c_str();
+    }
+
+    if (!file_exists(std::string(path))) {
+        path = te.raw_path.c_str();
+        printf("Tagged file not found, reverting to %s\n", path);
     }
 
     printf("Loading %s\n", path);
@@ -262,6 +341,36 @@ int find_next_dir_idx(std::vector<timeline_entry>& timeline_entries, int curr_id
         if (timeline_entries[idx].directory && 
             timeline_entries[idx].level == curr_lvl &&
             timeline_entries[idx].dir_path.find(timeline_entries[curr_idx].dir_path) != std::string::npos) {
+            return idx;
+        }
+    }
+
+    return curr_idx;
+}
+
+int find_prev_highlighted_idx(std::vector<timeline_entry>& timeline_entries, int curr_idx)
+{
+    int idx = curr_idx;
+
+    while(idx - 1 >= 0) {
+        idx--;
+
+        if (timeline_entries[idx].highlighted) {
+            return idx;
+        }
+    }
+
+    return curr_idx;
+}
+
+int find_next_highlighted_idx(std::vector<timeline_entry>& timeline_entries, int curr_idx)
+{
+    int idx = curr_idx;
+
+    while(idx + 1 < timeline_entries.size()) {
+        idx++;
+
+        if (timeline_entries[idx].highlighted) {
             return idx;
         }
     }
@@ -317,6 +426,7 @@ int main(int argc, char* argv[])
     timeline_entry te = timeline_entries[te_idx];
 
     bool toggle_flag = false;
+    bool caps = false;
 
     SDL_Event event;
     SDL_Renderer *renderer = NULL;
@@ -347,7 +457,12 @@ int main(int argc, char* argv[])
                         toggle_flag = false;
                     }
 
+                    if (key_code == 0x40000039) {
+                        caps = !caps;
+                    }
+
                     int shift_state = KMOD_SHIFT;
+                    int ctrl_state = KMOD_CTRL;
                     bool shift = false;
                     if (SDL_GetModState() & shift_state != 0) {
                         shift = true;
@@ -380,6 +495,13 @@ int main(int argc, char* argv[])
                                     te = timeline_entries[te_idx];
                                     display_image(te, renderer, &texture, toggle_flag);
                                 }
+                            } else if (caps) {
+                                auto idx = find_prev_highlighted_idx(timeline_entries, te_idx);
+                                if (idx != te_idx) {
+                                    te_idx = idx;
+                                    te = timeline_entries[te_idx];
+                                    display_image(te, renderer, &texture, toggle_flag);
+                                }
                             } else {
                                 if (te_idx - 1 >= 0)  {
                                     te_idx--;
@@ -391,6 +513,13 @@ int main(int argc, char* argv[])
                         case SDLK_RIGHT:
                             if (shift) {
                                 auto idx = find_next_dir_idx(timeline_entries, te_idx);
+                                if (idx != te_idx) {
+                                    te_idx = idx;
+                                    te = timeline_entries[te_idx];
+                                    display_image(te, renderer, &texture, toggle_flag);
+                                }
+                            } else if (caps) {
+                                auto idx = find_next_highlighted_idx(timeline_entries, te_idx);
                                 if (idx != te_idx) {
                                     te_idx = idx;
                                     te = timeline_entries[te_idx];
@@ -471,6 +600,18 @@ int main(int argc, char* argv[])
                                 break;
                             }
                         }
+                        case SDLK_RETURN: {
+                            if (!timeline_entries[te_idx].highlighted) {
+                                highlight_entry(timeline_entries[te_idx]);
+                            } else {
+                                unhighlight_entry(timeline_entries[te_idx]);
+                            }
+                            break;
+                        }
+                        case SDLK_DELETE: {
+                            delete_tagged_img(timeline_entries[te_idx]);
+                            break;
+                        }
                     }
                 }
                 prev_key_code = event.key.keysym.sym;
@@ -493,3 +634,4 @@ int main(int argc, char* argv[])
 
     return EXIT_SUCCESS;
 }
+
