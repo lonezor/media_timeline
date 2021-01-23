@@ -73,6 +73,43 @@ surface_create(const char* path, antiAliasMode_t antiAliasMode)
 
 //-----------------------------------------------------------------------------------------------------------
 
+void surface_op_fontFace(surface_t* s, std::string name, font_slant slant, font_weight weight)
+{
+    cairo_font_slant_t cr_slant;
+    switch(slant)
+    {
+        case font_slant::normal:
+            cr_slant = CAIRO_FONT_SLANT_NORMAL;
+            break;
+        case font_slant::italic:
+            cr_slant = CAIRO_FONT_SLANT_ITALIC;
+            break;
+        case font_slant::oblique:
+            cr_slant = CAIRO_FONT_SLANT_OBLIQUE;
+            break;
+    }
+
+    cairo_font_weight_t cr_weight;
+    switch(weight)
+    {
+        case font_weight::normal:
+            cr_weight = CAIRO_FONT_WEIGHT_NORMAL;
+            break;
+        case font_weight::bold:
+            cr_weight = CAIRO_FONT_WEIGHT_BOLD;
+            break;
+    }
+    
+    auto cr = s->cr;
+    cairo_select_font_face(cr, name.c_str(), cr_slant, cr_weight);
+}
+
+//-----------------------------------------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------------------------------------
+
 void
 surface_destroy(surface_t* s)
 {

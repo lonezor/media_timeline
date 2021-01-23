@@ -2,6 +2,7 @@
 #define _SURFACE_H_
 
 #include "image.hpp"
+#include <string>
 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -15,6 +16,19 @@ typedef enum {
     SCALING_MODE_NONE,      // The same coordinates are used regardless of resolution
     SCALING_MODE_REFERENCE, // Coordinates are adjusted based on reference resolution (default)
 } scalingMode_t;
+
+enum class font_slant
+{
+    normal,
+    italic,
+    oblique,
+};
+
+enum class font_weight
+{
+    normal,
+    bold,
+};
 
 typedef struct _surface_t surface_t;
 
@@ -42,10 +56,16 @@ void
 surface_op_lineWidth(surface_t* s, double lineWidth);
 
 void
+surface_op_fontFace(surface_t* s, std::string name, font_slant slant, font_weight weight);
+
+void
 surface_op_fontSize(surface_t* s, double fontSize);
 
 void
 surface_op_showText(surface_t* s, const char* text);
+
+void
+surface_op_textPath(surface_t* s, const char* text);
 
 void
 surface_op_sourceRgb(surface_t* s, double r, double g, double b);
@@ -88,9 +108,6 @@ surface_saveAsPng(surface_t* s, const char* path);
 
 void
 surface_saveAsJpg(surface_t* s, const char* path);
-
-void
-surface_op_textPath(surface_t* s, const char* text);
 
 void
 surface_op_fillPreserve(surface_t* s);
